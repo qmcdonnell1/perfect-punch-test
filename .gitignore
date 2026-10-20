@@ -1,0 +1,4 @@
+# Ignore standard Python virtual environment folders
+venv/
+.venv/
+env/
