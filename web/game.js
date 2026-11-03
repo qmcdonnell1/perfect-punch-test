@@ -633,7 +633,7 @@ function loop() {
     worldBuf.push({ t: now, skel: normalizeSkeleton(res.worldLandmarks[0]) });
     if (worldBuf.length > WORLD_BUFFER_FRAMES) worldBuf.shift();
   }
-  const punchEvents = lms ? detector.update(now, lms) : [];
+  const punchEvents = lms ? detector.update(now, lms, W, H) : [];
 
   // Shapes are drawn in camera coordinates under a mirror transform; text after, at mirrored x.
   ctx.setTransform(-1, 0, 0, 1, W, 0);

@@ -72,7 +72,7 @@ class PunchTracker {
    *  {type:"punch", side, startT, peakT, endT, peakPts, peakPos}   punch finished (arm starts to come back)
    *  {type:"dropped", side, t}                                     throw timed out without a clear peak
    */
-  update(t, lms, scale) {
+  update(t, lms, scale, raw = lms) {   // `raw` = the original normalized landmarks, for the snapshot returned to the game
     const wrist = lmArray(lms[this.wristId]);
     const wristRel = sub3(wrist, lmArray(lms[this.shoulderId])).map((v) => v / scale);
 
@@ -91,7 +91,7 @@ class PunchTracker {
         this.maxSpeed = speed;
         this.startT = this.peakT = t;   // peak initialised so a quick drop-off can't emit a stale peak
         this.awayStart = null;
-        this.#snapshot(lms);
+        this.#snapshot(raw);
         return { type: "start", side: this.side, t };
       }
       const still = speed < GUARD_MAX_SPEED;
@@ -115,7 +115,7 @@ class PunchTracker {
       if (extension > this.maxExt) {
         this.maxExt = extension;
         this.peakT = t;
-        this.#snapshot(lms);
+        this.#snapshot(raw);
       }
       this.maxSpeed = Math.max(this.maxSpeed, speed);
 
@@ -147,8 +147,16 @@ export class PunchDetector {
     this.scaleBuf = [];
   }
 
-  /** Feed one frame of landmarks at time t (seconds). Returns this frame's events. */
-  update(t, lms) {
+  /**
+   * Feed one frame of landmarks at time t (seconds). Returns this frame's events.
+   * `width`/`height` are the camera frame size in pixels. MediaPipe's image landmarks are fractions of the frame
+   * (x of the width, y of the height, z on the x scale), so on a non-square frame the axes have different units.
+   * The Python thresholds were tuned on a 480x480 frame, where they happened to agree; converting to square
+   * pixel units here keeps them meaning the same thing at any resolution or aspect ratio.
+   */
+  update(t, lms, width = 1, height = 1) {
+    const raw = lms;
+    if (width !== height) lms = lms.map((l) => ({ x: l.x * width, y: l.y * height, z: (l.z ?? 0) * width, visibility: l.visibility }));
     const trackers = Object.values(this.trackers);
     // Shoulder width is the scale; only learn it while nobody is mid-punch so punching can't distort it.
     if (trackers.every((tr) => tr.isIdle())) {
@@ -159,7 +167,7 @@ export class PunchDetector {
     const events = [];
     if (this.scaleBuf.length > 0) {
       const scale = median(this.scaleBuf);
-      if (scale > 1e-6) for (const tr of trackers) { const e = tr.update(t, lms, scale); if (e) events.push(e); }
+      if (scale > 1e-6) for (const tr of trackers) { const e = tr.update(t, lms, scale, raw); if (e) events.push(e); }
     }
     return events;
   }
